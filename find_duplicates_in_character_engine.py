@@ -6,7 +6,7 @@ from collections import defaultdict
 
 ROOT = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
 
-OUTPUT_DIR = Path.home() / "tools/image_deduper/_dedupe_results"
+OUTPUT_DIR = Path("/mnt/c/Users/Danvx/Desktop/_dedupe_results")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GROUPS_CSV = OUTPUT_DIR / "character_engine_duplicate_groups.csv"
