@@ -6,10 +6,10 @@ import torch
 import numpy as np
 from collections import defaultdict
 
-PROJECT_ROOT = Path.home() / "tools/image_deduper"
+REPORT_ROOT = Path("/mnt/c/Users/Danvx/Desktop/_dedupe_results")
 ORGANISED = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
 NEW_IMAGES = Path("/mnt/c/Users/Danvx/Desktop/GPT Images - NEW ONLY")
-OUTPUT = PROJECT_ROOT / "_dedupe_results/folder_suggestions_centroid.csv"
+OUTPUT = REPORT_ROOT / "folder_suggestions_centroid.csv"
 
 IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
