@@ -3,21 +3,11 @@ import csv
 import shutil
 from collections import defaultdict
 
-CHARACTER_ENGINE = Path(
-    r"C:\Users\Danvx\My Stuff\Character Engine"
-)
-
-DUPLICATE_REPORT = Path(
-    r"C:\Users\Danvx\Desktop\image_deduper\_dedupe_results\character_engine_duplicate_files.csv"
-)
-
-QUARANTINE = Path(
-    r"C:\Users\Danvx\Desktop\Character Engine - DUPLICATES"
-)
-
-MANIFEST = Path(
-    r"C:\Users\Danvx\Desktop\image_deduper\_dedupe_results\duplicate_quarantine_manifest.csv"
-)
+PROJECT_ROOT = Path.home() / "tools/image_deduper"
+CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
+DUPLICATE_REPORT = PROJECT_ROOT / "_dedupe_results/character_engine_duplicate_files.csv"
+QUARANTINE = Path("/mnt/c/Users/Danvx/Desktop/Character Engine - DUPLICATES")
+MANIFEST = PROJECT_ROOT / "_dedupe_results/duplicate_quarantine_manifest.csv"
 
 QUARANTINE.mkdir(parents=True, exist_ok=True)
 MANIFEST.parent.mkdir(parents=True, exist_ok=True)
