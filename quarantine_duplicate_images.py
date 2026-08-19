@@ -33,6 +33,23 @@ def unique_destination(target: Path) -> Path:
         counter += 1
 
 
+def choose_keeper(files):
+    """
+    Prefer a copy stored in a References folder.
+    If none exists, keep the first file from the duplicate group.
+    """
+    reference_files = [
+        path
+        for path in files
+        if any(part.lower() == "references" for part in path.parts)
+    ]
+
+    if reference_files:
+        return reference_files[0]
+
+    return files[0]
+
+
 groups = defaultdict(list)
 
 with open(DUPLICATE_REPORT, newline="", encoding="utf-8-sig") as f:
@@ -57,10 +74,12 @@ for group_id, files in groups.items():
         missing += len(files) - len(existing_files)
         continue
 
-    # Keep the first listed file as the canonical copy.
-    kept_file = existing_files[0]
+    kept_file = choose_keeper(existing_files)
 
-    for duplicate_file in existing_files[1:]:
+    for duplicate_file in existing_files:
+        if duplicate_file == kept_file:
+            continue
+
         try:
             relative_path = duplicate_file.relative_to(CHARACTER_ENGINE)
 
