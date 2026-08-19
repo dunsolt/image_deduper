@@ -2,13 +2,9 @@ from pathlib import Path
 import csv
 import shutil
 
-CSV_FILE = Path(
-    r"C:\Users\Danvx\Desktop\image_deduper\_dedupe_results\folder_suggestions_centroid.csv"
-)
-
-DESTINATION = Path(
-    r"C:\Users\Danvx\Desktop\GPT Images - REVIEW"
-)
+PROJECT_ROOT = Path.home() / "tools/image_deduper"
+CSV_FILE = PROJECT_ROOT / "_dedupe_results/folder_suggestions_centroid.csv"
+DESTINATION = Path("/mnt/c/Users/Danvx/Desktop/GPT Images - REVIEW")
 
 DESTINATION.mkdir(parents=True, exist_ok=True)
 
