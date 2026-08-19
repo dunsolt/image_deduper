@@ -2,10 +2,10 @@ from pathlib import Path
 import csv
 import shutil
 
-PROJECT_ROOT = Path.home() / "tools/image_deduper"
+REPORT_ROOT = Path("/mnt/c/Users/Danvx/Desktop/_dedupe_results")
 SOURCE = Path("/mnt/c/Users/Danvx/Desktop/GPT-REVIEW/Confident")
 DESTINATION = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
-MANIFEST = PROJECT_ROOT / "_dedupe_results/final_merge_manifest.csv"
+MANIFEST = REPORT_ROOT / "final_merge_manifest.csv"
 
 IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
