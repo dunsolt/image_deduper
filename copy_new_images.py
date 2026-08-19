@@ -2,8 +2,8 @@ from pathlib import Path
 import csv
 import shutil
 
-PROJECT_ROOT = Path.home() / "tools/image_deduper"
-CSV_FILE = PROJECT_ROOT / "_dedupe_results/new_images.csv"
+REPORT_ROOT = Path("/mnt/c/Users/Danvx/Desktop/_dedupe_results")
+CSV_FILE = REPORT_ROOT / "new_images.csv"
 DESTINATION = Path("/mnt/c/Users/Danvx/Desktop/icloud_dump - NEW ONLY")
 
 DESTINATION.mkdir(parents=True, exist_ok=True)
