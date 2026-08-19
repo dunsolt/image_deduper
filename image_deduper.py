@@ -9,7 +9,7 @@ IMAGE_EXTENSIONS = {
 }
 
 DEFAULT_ORGANISED = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
-DEFAULT_OUTPUT_ROOT = Path.home() / "tools/image_deduper/_dedupe_results"
+DEFAULT_OUTPUT_ROOT = Path("/mnt/c/Users/Danvx/Desktop/_dedupe_results")
 
 
 def ask_path(prompt, default=None):
