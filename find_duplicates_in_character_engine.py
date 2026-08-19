@@ -4,7 +4,7 @@ import hashlib
 import csv
 from collections import defaultdict
 
-ROOT = Path(r"/mnt/c/Users/Danvx/My Stuff/Character Engine")
+ROOT = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
 
 OUTPUT_DIR = Path(
     r"/mnt/c/Users/Danvx/Desktop/_dedupe_results"
