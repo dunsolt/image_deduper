@@ -35,19 +35,19 @@ def unique_destination(target: Path) -> Path:
 
 def choose_keeper(files):
     """
-    Prefer a copy stored in a References folder.
-    If none exists, keep the first file from the duplicate group.
+    Prefer copies stored inside a character subfolder over files sitting
+    directly in the character's main folder. If several copies are equally
+    nested, keep the first one from the duplicate group.
     """
-    reference_files = [
-        path
-        for path in files
-        if any(part.lower() == "references" for part in path.parts)
-    ]
+    def nesting_depth(path: Path):
+        relative = path.relative_to(CHARACTER_ENGINE)
 
-    if reference_files:
-        return reference_files[0]
+        # Example:
+        # Character/image.png -> parent has 1 part
+        # Character/References/image.png -> parent has 2 parts
+        return len(relative.parent.parts)
 
-    return files[0]
+    return max(files, key=nesting_depth)
 
 
 groups = defaultdict(list)
