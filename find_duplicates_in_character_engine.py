@@ -4,10 +4,10 @@ import hashlib
 import csv
 from collections import defaultdict
 
-ROOT = Path(r"C:\Users\Danvx\My Stuff\Character Engine")
+ROOT = Path(r"/mnt/c/Users/Danvx/My Stuff/Character Engine")
 
 OUTPUT_DIR = Path(
-    r"C:\Users\Danvx\Desktop\image_deduper\_dedupe_results"
+    r"/mnt/c/Users/Danvx/Desktop/_dedupe_results"
 )
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
