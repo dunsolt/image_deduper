@@ -1,6 +1,8 @@
 from pathlib import Path
 import csv
 import re
+import shutil
+
 
 GEN_PATTERN = re.compile(r"^gen_(\d{6})$", re.IGNORECASE)
 
@@ -8,24 +10,36 @@ IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
 }
 
-DEFAULT_NAME_SOURCE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
+CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
+INBOX = CHARACTER_ENGINE / "ZZ_Inbox"
+SOURCE = INBOX / "new_only"
+DESTINATION = INBOX / "ready_to_sort"
+REPORTS = INBOX / "reports"
+REPORT = REPORTS / "rename_manifest.csv"
 
 
-def ask_path(prompt, default=None):
-    if default is not None:
-        value = input(f"{prompt} [{default}]: ").strip()
-        path = Path(value) if value else default
-    else:
-        value = input(f"{prompt}: ").strip()
-        path = Path(value)
+def image_files(root: Path):
+    return sorted(
+        [
+            path
+            for path in root.iterdir()
+            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+        ],
+        key=lambda path: path.name.lower(),
+    )
 
-    return path.expanduser()
 
-
-def find_highest_index(root: Path):
+def find_highest_index(root: Path, *, exclude: Path | None = None):
     highest = 0
 
     for path in root.rglob("*"):
+        if exclude is not None:
+            try:
+                path.relative_to(exclude)
+                continue
+            except ValueError:
+                pass
+
         if not path.is_file():
             continue
 
@@ -40,117 +54,121 @@ def find_highest_index(root: Path):
 def main():
     print("\n=== Image Renamer ===\n")
 
-    folder = ask_path("Folder to rename")
-
-    name_source = ask_path(
-        "Existing archive to check for used gen numbers",
-        DEFAULT_NAME_SOURCE,
-    )
-
-    if not folder.exists() or not folder.is_dir():
-        print(f"\nError: rename folder is invalid:\n{folder}")
+    if not CHARACTER_ENGINE.exists() or not CHARACTER_ENGINE.is_dir():
+        print(f"Error: Character Engine folder is invalid:\n{CHARACTER_ENGINE}")
         return
 
-    if not name_source.exists() or not name_source.is_dir():
-        print(f"\nError: archive folder is invalid:\n{name_source}")
+    if not SOURCE.exists() or not SOURCE.is_dir():
+        print(
+            "Error: new_only folder does not exist.\n"
+            "Run image_deduper.py first.\n\n"
+            f"Expected:\n{SOURCE}"
+        )
         return
 
-    report = folder / "rename_manifest.csv"
+    DESTINATION.mkdir(parents=True, exist_ok=True)
+    REPORTS.mkdir(parents=True, exist_ok=True)
 
-    highest_existing = max(
-        find_highest_index(name_source),
-        find_highest_index(folder),
+    source_images = image_files(SOURCE)
+    existing_output = image_files(DESTINATION)
+
+    if not source_images:
+        print(f"Nothing to rename. new_only is empty:\n{SOURCE}")
+        return
+
+    if existing_output:
+        print(
+            "Safety stop: ready_to_sort already contains images.\n"
+            "Sort or clear that folder before starting another rename batch.\n\n"
+            f"Folder:\n{DESTINATION}"
+        )
+        return
+
+    # Only archived files outside ZZ_Inbox determine the next permanent ID.
+    highest_existing = find_highest_index(
+        CHARACTER_ENGINE,
+        exclude=INBOX,
     )
-
     start_index = highest_existing + 1
 
-    images = sorted(
-        [
-            path
-            for path in folder.iterdir()
-            if (
-                path.is_file()
-                and path.suffix.lower() in IMAGE_EXTENSIONS
-                and not GEN_PATTERN.match(path.stem)
-            )
-        ],
-        key=lambda p: p.name.lower()
-    )
+    print(f"Source:              {SOURCE}")
+    print(f"Destination:         {DESTINATION}")
+    print(f"Images to copy:      {len(source_images):,}")
+    print(f"Highest archive ID:  gen_{highest_existing:06d}")
+    print(f"Starting ID:         gen_{start_index:06d}")
 
-    print(f"\nFound {len(images):,} images to rename.")
-    print(f"Highest existing gen ID: {highest_existing:06d}")
-    print(f"Starting at: gen_{start_index:06d}")
-    print(f"Manifest: {report}")
-
-    confirmation = input("\nProceed? [Y/n]: ").strip().lower()
+    confirmation = input("\nCreate renamed copies? [Y/n]: ").strip().lower()
 
     if confirmation not in ("", "y", "yes"):
         print("Cancelled.")
         return
 
     rows = []
+    copied = 0
+    errors = []
 
-    for index, old_path in enumerate(images, start=start_index):
-        new_name = f"gen_{index:06d}{old_path.suffix.lower()}"
-        new_path = folder / new_name
+    for index, source_path in enumerate(source_images, start=start_index):
+        new_name = f"gen_{index:06d}{source_path.suffix.lower()}"
+        destination_path = DESTINATION / new_name
 
-        if new_path.exists() and new_path != old_path:
-            raise FileExistsError(
-                f"Target already exists:\n{new_path}"
-            )
+        try:
+            if destination_path.exists():
+                raise FileExistsError(
+                    f"Target already exists: {destination_path}"
+                )
 
-        rows.append({
-            "index": index,
-            "old_filename": old_path.name,
-            "new_filename": new_name,
-            "old_path": str(old_path),
-            "new_path": str(new_path),
-        })
+            shutil.copy2(source_path, destination_path)
 
-    # Temporary rename stage prevents collisions.
-    temporary_paths = []
+            rows.append({
+                "index": index,
+                "source_filename": source_path.name,
+                "new_filename": new_name,
+                "source_path": str(source_path),
+                "destination_path": str(destination_path),
+            })
+            copied += 1
 
-    for temp_index, (old_path, row) in enumerate(
-        zip(images, rows),
-        start=1
-    ):
-        temp_path = (
-            folder
-            / f"__rename_temp_{temp_index:06d}{old_path.suffix.lower()}"
-        )
-
-        old_path.rename(temp_path)
-
-        temporary_paths.append(
-            (temp_path, folder / row["new_filename"])
-        )
-
-    for temp_path, final_path in temporary_paths:
-        temp_path.rename(final_path)
+        except Exception as e:
+            errors.append((str(source_path), str(e)))
+            print(f"ERROR: {source_path}")
+            print(e)
 
     with open(
-        report,
+        REPORT,
         "w",
         newline="",
-        encoding="utf-8-sig"
+        encoding="utf-8-sig",
     ) as f:
         writer = csv.DictWriter(
             f,
             fieldnames=[
                 "index",
-                "old_filename",
+                "source_filename",
                 "new_filename",
-                "old_path",
-                "new_path",
+                "source_path",
+                "destination_path",
             ],
         )
-
         writer.writeheader()
         writer.writerows(rows)
 
+    error_report = REPORTS / "rename_errors.csv"
+
+    with open(
+        error_report,
+        "w",
+        newline="",
+        encoding="utf-8-sig",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(["file", "error"])
+        writer.writerows(errors)
+
     print("\nDONE")
-    print(f"Renamed: {len(images):,}")
-    print(f"Manifest:\n{report}")
+    print(f"Renamed copies created: {copied:,}")
+    print(f"Errors:                 {len(errors):,}")
+    print(f"\nReady to sort:\n{DESTINATION}")
+    print(f"\nManifest:\n{REPORT}")
 
 
 if __name__ == "__main__":
