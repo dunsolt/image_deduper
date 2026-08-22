@@ -2,6 +2,7 @@ from pathlib import Path
 from PIL import Image
 import hashlib
 import csv
+import shutil
 
 
 IMAGE_EXTENSIONS = {
@@ -10,6 +11,7 @@ IMAGE_EXTENSIONS = {
 
 CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
 INBOX = CHARACTER_ENGINE / "ZZ_Inbox"
+NEW_ONLY = INBOX / "new_only"
 REPORTS = INBOX / "reports"
 
 
@@ -57,6 +59,47 @@ def pixel_hash(path: Path):
         return hasher.hexdigest(), img.size
 
 
+def copy_new_image(source: Path, digest: str) -> tuple[Path, bool]:
+    """
+    Copy a genuinely new image into new_only without overwriting anything.
+
+    If an identical copy is already present, return it instead of creating
+    another numbered copy. The boolean indicates whether a new copy was made.
+    """
+    target = NEW_ONLY / source.name
+
+    if not target.exists():
+        shutil.copy2(source, target)
+        return target, True
+
+    try:
+        existing_digest, _ = pixel_hash(target)
+        if existing_digest == digest:
+            return target, False
+    except Exception:
+        pass
+
+    stem = source.stem
+    suffix = source.suffix
+    counter = 2
+
+    while True:
+        candidate = NEW_ONLY / f"{stem}_{counter}{suffix}"
+
+        if not candidate.exists():
+            shutil.copy2(source, candidate)
+            return candidate, True
+
+        try:
+            existing_digest, _ = pixel_hash(candidate)
+            if existing_digest == digest:
+                return candidate, False
+        except Exception:
+            pass
+
+        counter += 1
+
+
 def main():
     print("\n=== Image Deduper ===\n")
 
@@ -90,7 +133,7 @@ def main():
     )
 
     # Only loose images directly inside ZZ_Inbox are treated as incoming.
-    # Subfolders such as reports are ignored.
+    # Subfolders such as new_only and reports are ignored.
     inbox_count_preview = count_images(
         INBOX,
         recursive=False,
@@ -98,6 +141,7 @@ def main():
 
     print(f"\nCharacter Engine: {organised_count_preview:,} images")
     print(f"ZZ_Inbox:        {inbox_count_preview:,} images")
+    print(f"New-only folder: {NEW_ONLY}")
     print(f"Reports folder:  {REPORTS}")
 
     if inbox_count_preview == 0:
@@ -110,6 +154,7 @@ def main():
         print("Cancelled.")
         return
 
+    NEW_ONLY.mkdir(parents=True, exist_ok=True)
     REPORTS.mkdir(parents=True, exist_ok=True)
 
     print("\nIndexing Character Engine (excluding ZZ_Inbox)...")
@@ -260,13 +305,47 @@ def main():
         writer.writerow(["file", "error"])
         writer.writerows(errors)
 
+    print("\nCopying genuinely new images to new_only...")
+
+    copied_count = 0
+    already_copied_count = 0
+
+    for row in new_images:
+        source = Path(row["new_file"])
+
+        try:
+            _, copied = copy_new_image(source, row["pixel_hash"])
+
+            if copied:
+                copied_count += 1
+            else:
+                already_copied_count += 1
+
+        except Exception as e:
+            errors.append((str(source), f"Copy to new_only failed: {e}"))
+            print(f"ERROR copying to new_only:\n{source}\n{e}")
+
+    # Rewrite errors.csv so copy errors are included too.
+    with open(
+        REPORTS / "errors.csv",
+        "w",
+        newline="",
+        encoding="utf-8-sig",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(["file", "error"])
+        writer.writerows(errors)
+
     print("\nDONE")
     print(f"Character Engine scanned: {organised_count:,} images")
     print(f"ZZ_Inbox checked:         {checked_count:,} images")
     print(f"Already in archive:       {len(archive_matches):,}")
     print(f"Duplicates within inbox:  {len(batch_duplicates):,}")
     print(f"Genuinely new:            {len(new_images):,}")
+    print(f"Copied to new_only:       {copied_count:,}")
+    print(f"Already in new_only:      {already_copied_count:,}")
     print(f"Errors:                   {len(errors):,}")
+    print(f"\nNew images copied to:\n{NEW_ONLY}")
     print(f"\nReports saved to:\n{REPORTS}")
 
 
