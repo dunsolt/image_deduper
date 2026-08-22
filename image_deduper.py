@@ -138,44 +138,64 @@ def main():
     print(f"\nIndexed {organised_count:,} organised images.")
     print("\nComparing ZZ_Inbox...")
 
-    matches = []
+    archive_matches = []
+    batch_duplicates = []
     new_images = []
-    new_count = 0
+    inbox_hashes = {}
+    checked_count = 0
 
     for path in image_files(INBOX, recursive=False):
         try:
             digest, dimensions = pixel_hash(path)
-            new_count += 1
+            checked_count += 1
 
             if digest in organised_hashes:
                 for existing in organised_hashes[digest]:
-                    matches.append({
-                        "new_file": str(path),
+                    archive_matches.append({
+                        "inbox_file": str(path),
                         "existing_file": str(existing["path"]),
                         "pixel_hash": digest,
                         "width": dimensions[0],
                         "height": dimensions[1],
                     })
-            else:
-                new_images.append({
-                    "new_file": str(path),
+                continue
+
+            if digest in inbox_hashes:
+                original = inbox_hashes[digest]
+                batch_duplicates.append({
+                    "duplicate_file": str(path),
+                    "first_file": str(original["path"]),
                     "pixel_hash": digest,
                     "width": dimensions[0],
                     "height": dimensions[1],
                 })
+                continue
 
-            if new_count % 250 == 0:
+            inbox_hashes[digest] = {
+                "path": path,
+                "dimensions": dimensions,
+            }
+
+            new_images.append({
+                "new_file": str(path),
+                "pixel_hash": digest,
+                "width": dimensions[0],
+                "height": dimensions[1],
+            })
+
+            if checked_count % 250 == 0:
                 print(
-                    f"  Checked {new_count:,} inbox images "
-                    f"| archive matches: {len(matches):,} "
-                    f"| unmatched: {len(new_images):,}"
+                    f"  Checked {checked_count:,} inbox images "
+                    f"| in archive: {len(archive_matches):,} "
+                    f"| batch duplicates: {len(batch_duplicates):,} "
+                    f"| new: {len(new_images):,}"
                 )
 
         except Exception as e:
             errors.append((str(path), str(e)))
 
     with open(
-        REPORTS / "exact_pixel_matches.csv",
+        REPORTS / "already_in_archive.csv",
         "w",
         newline="",
         encoding="utf-8-sig",
@@ -183,7 +203,7 @@ def main():
         writer = csv.DictWriter(
             f,
             fieldnames=[
-                "new_file",
+                "inbox_file",
                 "existing_file",
                 "pixel_hash",
                 "width",
@@ -191,7 +211,26 @@ def main():
             ],
         )
         writer.writeheader()
-        writer.writerows(matches)
+        writer.writerows(archive_matches)
+
+    with open(
+        REPORTS / "duplicates_within_inbox.csv",
+        "w",
+        newline="",
+        encoding="utf-8-sig",
+    ) as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "duplicate_file",
+                "first_file",
+                "pixel_hash",
+                "width",
+                "height",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(batch_duplicates)
 
     with open(
         REPORTS / "new_images.csv",
@@ -223,9 +262,10 @@ def main():
 
     print("\nDONE")
     print(f"Character Engine scanned: {organised_count:,} images")
-    print(f"ZZ_Inbox checked:         {new_count:,} images")
-    print(f"Already in archive:       {len(matches):,}")
-    print(f"Unmatched:                {len(new_images):,}")
+    print(f"ZZ_Inbox checked:         {checked_count:,} images")
+    print(f"Already in archive:       {len(archive_matches):,}")
+    print(f"Duplicates within inbox:  {len(batch_duplicates):,}")
+    print(f"Genuinely new:            {len(new_images):,}")
     print(f"Errors:                   {len(errors):,}")
     print(f"\nReports saved to:\n{REPORTS}")
 
