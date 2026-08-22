@@ -2,6 +2,7 @@ from pathlib import Path
 from PIL import Image
 import hashlib
 import csv
+import json
 import shutil
 
 
@@ -13,6 +14,7 @@ CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
 INBOX = CHARACTER_ENGINE / "ZZ_Inbox"
 NEW_ONLY = INBOX / "new_only"
 REPORTS = INBOX / "reports"
+ARCHIVE_CACHE = REPORTS / "archive_hash_cache.json"
 
 
 def image_files(root: Path, *, exclude: Path | None = None, recursive: bool = True):
@@ -57,6 +59,35 @@ def pixel_hash(path: Path):
         hasher.update(img.tobytes())
 
         return hasher.hexdigest(), img.size
+
+
+def load_archive_cache():
+    """Load the archive hash cache, or return an empty cache if unavailable."""
+    if not ARCHIVE_CACHE.exists():
+        return {}
+
+    try:
+        with open(ARCHIVE_CACHE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("Cache root is not a dictionary")
+
+        return data
+
+    except Exception as e:
+        print(f"  Cache unavailable; rebuilding it ({e})")
+        return {}
+
+
+def save_archive_cache(cache):
+    """Write the cache atomically so an interrupted run cannot corrupt it."""
+    temporary = ARCHIVE_CACHE.with_suffix(".json.tmp")
+
+    with open(temporary, "w", encoding="utf-8") as f:
+        json.dump(cache, f, indent=2, sort_keys=True)
+
+    temporary.replace(ARCHIVE_CACHE)
 
 
 def copy_new_image(source: Path, digest: str) -> tuple[Path, bool]:
@@ -159,13 +190,42 @@ def main():
 
     print("\nIndexing Character Engine (excluding ZZ_Inbox)...")
 
+    old_cache = load_archive_cache()
+    new_cache = {}
     organised_hashes = {}
     organised_count = 0
+    cache_hits = 0
+    freshly_hashed = 0
     errors = []
 
     for path in image_files(CHARACTER_ENGINE, exclude=INBOX):
         try:
-            digest, dimensions = pixel_hash(path)
+            stat = path.stat()
+            relative_path = str(path.relative_to(CHARACTER_ENGINE))
+            cached = old_cache.get(relative_path)
+
+            if (
+                isinstance(cached, dict)
+                and cached.get("size") == stat.st_size
+                and cached.get("mtime_ns") == stat.st_mtime_ns
+                and isinstance(cached.get("pixel_hash"), str)
+                and isinstance(cached.get("width"), int)
+                and isinstance(cached.get("height"), int)
+            ):
+                digest = cached["pixel_hash"]
+                dimensions = (cached["width"], cached["height"])
+                cache_hits += 1
+            else:
+                digest, dimensions = pixel_hash(path)
+                freshly_hashed += 1
+
+            new_cache[relative_path] = {
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+                "pixel_hash": digest,
+                "width": dimensions[0],
+                "height": dimensions[1],
+            }
 
             organised_hashes.setdefault(digest, []).append({
                 "path": path,
@@ -175,12 +235,24 @@ def main():
             organised_count += 1
 
             if organised_count % 250 == 0:
-                print(f"  Indexed {organised_count:,} organised images...")
+                print(
+                    f"  Indexed {organised_count:,} organised images "
+                    f"| cached: {cache_hits:,} "
+                    f"| hashed: {freshly_hashed:,}"
+                )
 
         except Exception as e:
             errors.append((str(path), str(e)))
 
+    try:
+        save_archive_cache(new_cache)
+    except Exception as e:
+        errors.append((str(ARCHIVE_CACHE), f"Could not save archive cache: {e}"))
+        print(f"WARNING: Could not save archive cache: {e}")
+
     print(f"\nIndexed {organised_count:,} organised images.")
+    print(f"Archive cache hits:       {cache_hits:,}")
+    print(f"Archive images hashed:    {freshly_hashed:,}")
     print("\nComparing ZZ_Inbox...")
 
     archive_matches = []
@@ -338,6 +410,8 @@ def main():
 
     print("\nDONE")
     print(f"Character Engine scanned: {organised_count:,} images")
+    print(f"Archive cache hits:       {cache_hits:,}")
+    print(f"Archive images hashed:    {freshly_hashed:,}")
     print(f"ZZ_Inbox checked:         {checked_count:,} images")
     print(f"Already in archive:       {len(archive_matches):,}")
     print(f"Duplicates within inbox:  {len(batch_duplicates):,}")
