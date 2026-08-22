@@ -8,29 +8,35 @@ IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
 }
 
-DEFAULT_ORGANISED = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
-DEFAULT_OUTPUT_ROOT = Path("/mnt/c/Users/Danvx/Desktop/_dedupe_results")
+CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
+INBOX = CHARACTER_ENGINE / "ZZ_Inbox"
+REPORTS = INBOX / "reports"
 
 
-def ask_path(prompt, default=None):
-    if default:
-        value = input(f"{prompt} [{default}]: ").strip()
-        path = Path(value) if value else default
-    else:
-        value = input(f"{prompt}: ").strip()
-        path = Path(value)
+def image_files(root: Path, *, exclude: Path | None = None, recursive: bool = True):
+    iterator = root.rglob("*") if recursive else root.iterdir()
 
-    return path.expanduser()
+    for path in iterator:
+        if exclude is not None:
+            try:
+                path.relative_to(exclude)
+                continue
+            except ValueError:
+                pass
 
-
-def image_files(root: Path):
-    for path in root.rglob("*"):
         if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS:
             yield path
 
 
-def count_images(root: Path):
-    return sum(1 for _ in image_files(root))
+def count_images(root: Path, *, exclude: Path | None = None, recursive: bool = True):
+    return sum(
+        1
+        for _ in image_files(
+            root,
+            exclude=exclude,
+            recursive=recursive,
+        )
+    )
 
 
 def pixel_hash(path: Path):
@@ -54,47 +60,49 @@ def pixel_hash(path: Path):
 def main():
     print("\n=== Image Deduper ===\n")
 
-    organised = ask_path(
-        "Character Engine folder",
-        DEFAULT_ORGANISED,
+    if not CHARACTER_ENGINE.exists():
+        print(
+            "Error: Character Engine folder does not exist:\n"
+            f"{CHARACTER_ENGINE}"
+        )
+        return
+
+    if not CHARACTER_ENGINE.is_dir():
+        print(
+            "Error: Character Engine path is not a directory:\n"
+            f"{CHARACTER_ENGINE}"
+        )
+        return
+
+    if not INBOX.exists():
+        print(f"Error: ZZ_Inbox folder does not exist:\n{INBOX}")
+        return
+
+    if not INBOX.is_dir():
+        print(f"Error: ZZ_Inbox path is not a directory:\n{INBOX}")
+        return
+
+    print("Checking folders...")
+
+    organised_count_preview = count_images(
+        CHARACTER_ENGINE,
+        exclude=INBOX,
     )
 
-    new_batch = ask_path(
-        "New batch folder"
+    # Only loose images directly inside ZZ_Inbox are treated as incoming.
+    # Subfolders such as reports are ignored.
+    inbox_count_preview = count_images(
+        INBOX,
+        recursive=False,
     )
-
-    batch_name = input("Batch name: ").strip()
-
-    if not batch_name:
-        print("Error: batch name cannot be empty.")
-        return
-
-    output = DEFAULT_OUTPUT_ROOT / batch_name
-
-    if not organised.exists():
-        print(f"\nError: Character Engine folder does not exist:\n{organised}")
-        return
-
-    if not new_batch.exists():
-        print(f"\nError: new batch folder does not exist:\n{new_batch}")
-        return
-
-    if not organised.is_dir():
-        print(f"\nError: Character Engine path is not a directory:\n{organised}")
-        return
-
-    if not new_batch.is_dir():
-        print(f"\nError: new batch path is not a directory:\n{new_batch}")
-        return
-
-    print("\nChecking folders...")
-
-    organised_count_preview = count_images(organised)
-    new_batch_count_preview = count_images(new_batch)
 
     print(f"\nCharacter Engine: {organised_count_preview:,} images")
-    print(f"New batch:        {new_batch_count_preview:,} images")
-    print(f"Results folder:   {output}")
+    print(f"ZZ_Inbox:        {inbox_count_preview:,} images")
+    print(f"Reports folder:  {REPORTS}")
+
+    if inbox_count_preview == 0:
+        print("\nNothing to scan. Drop images directly into ZZ_Inbox first.")
+        return
 
     confirmation = input("\nStart scan? [Y/n]: ").strip().lower()
 
@@ -102,15 +110,15 @@ def main():
         print("Cancelled.")
         return
 
-    output.mkdir(parents=True, exist_ok=True)
+    REPORTS.mkdir(parents=True, exist_ok=True)
 
-    print("\nIndexing organised archive...")
+    print("\nIndexing Character Engine (excluding ZZ_Inbox)...")
 
     organised_hashes = {}
     organised_count = 0
     errors = []
 
-    for path in image_files(organised):
+    for path in image_files(CHARACTER_ENGINE, exclude=INBOX):
         try:
             digest, dimensions = pixel_hash(path)
 
@@ -122,21 +130,19 @@ def main():
             organised_count += 1
 
             if organised_count % 250 == 0:
-                print(
-                    f"  Indexed {organised_count:,} organised images..."
-                )
+                print(f"  Indexed {organised_count:,} organised images...")
 
         except Exception as e:
             errors.append((str(path), str(e)))
 
     print(f"\nIndexed {organised_count:,} organised images.")
-    print("\nComparing new batch...")
+    print("\nComparing ZZ_Inbox...")
 
     matches = []
     new_images = []
     new_count = 0
 
-    for path in image_files(new_batch):
+    for path in image_files(INBOX, recursive=False):
         try:
             digest, dimensions = pixel_hash(path)
             new_count += 1
@@ -160,16 +166,16 @@ def main():
 
             if new_count % 250 == 0:
                 print(
-                    f"  Checked {new_count:,} new images "
-                    f"| duplicates: {len(matches):,} "
-                    f"| new: {len(new_images):,}"
+                    f"  Checked {new_count:,} inbox images "
+                    f"| archive matches: {len(matches):,} "
+                    f"| unmatched: {len(new_images):,}"
                 )
 
         except Exception as e:
             errors.append((str(path), str(e)))
 
     with open(
-        output / "exact_pixel_matches.csv",
+        REPORTS / "exact_pixel_matches.csv",
         "w",
         newline="",
         encoding="utf-8-sig",
@@ -188,7 +194,7 @@ def main():
         writer.writerows(matches)
 
     with open(
-        output / "new_images.csv",
+        REPORTS / "new_images.csv",
         "w",
         newline="",
         encoding="utf-8-sig",
@@ -206,7 +212,7 @@ def main():
         writer.writerows(new_images)
 
     with open(
-        output / "errors.csv",
+        REPORTS / "errors.csv",
         "w",
         newline="",
         encoding="utf-8-sig",
@@ -216,12 +222,12 @@ def main():
         writer.writerows(errors)
 
     print("\nDONE")
-    print(f"Organised archive: {organised_count:,} images")
-    print(f"New batch checked: {new_count:,} images")
-    print(f"Pixel-identical matches: {len(matches):,}")
-    print(f"Genuinely unmatched: {len(new_images):,}")
-    print(f"Errors: {len(errors):,}")
-    print(f"\nReports saved to:\n{output}")
+    print(f"Character Engine scanned: {organised_count:,} images")
+    print(f"ZZ_Inbox checked:         {new_count:,} images")
+    print(f"Already in archive:       {len(matches):,}")
+    print(f"Unmatched:                {len(new_images):,}")
+    print(f"Errors:                   {len(errors):,}")
+    print(f"\nReports saved to:\n{REPORTS}")
 
 
 if __name__ == "__main__":
