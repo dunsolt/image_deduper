@@ -44,12 +44,39 @@ def pixel_hash(path: Path):
         return hasher.hexdigest(), img.size
 
 
+def folder_depth(path: Path) -> int:
+    """
+    Return the depth of the file's parent folder beneath Character Engine.
+
+    Examples:
+      Character/image.png -> 1
+      Character/References/image.png -> 2
+    """
+    relative = path.relative_to(CHARACTER_ENGINE)
+    return len(relative.parent.parts)
+
+
+def choose_keeper(files):
+    """
+    Prefer the deepest-sorted copy. If several files have the same depth,
+    choose deterministically by relative path.
+    """
+    return min(
+        files,
+        key=lambda item: (
+            -folder_depth(item["path"]),
+            str(item["path"].relative_to(CHARACTER_ENGINE)).lower(),
+        ),
+    )
+
+
 def main():
     print("\n=== Character Engine Duplicate Audit ===\n")
     print(f"Character Engine: {CHARACTER_ENGINE}")
     print(f"Ignoring:         {INBOX}")
     print(f"Reports:          {REPORTS}")
-    print("\nThis script is report-only. It will not move or delete any files.\n")
+    print("\nThis script is report-only. It will not move or delete any files.")
+    print("Deeper folder locations are marked KEEP before shallower copies.\n")
 
     if not CHARACTER_ENGINE.exists() or not CHARACTER_ENGINE.is_dir():
         print(f"Error: Character Engine folder is invalid:\n{CHARACTER_ENGINE}")
@@ -98,21 +125,38 @@ def main():
         group_id += 1
         extra_copies += len(files) - 1
 
+        keeper = choose_keeper(files)
+        keeper_path = keeper["path"]
+        keeper_depth = folder_depth(keeper_path)
+
         duplicate_groups.append({
             "group_id": group_id,
             "pixel_hash": digest,
             "copies": len(files),
             "width": files[0]["width"],
             "height": files[0]["height"],
-            "sample_file": str(files[0]["path"]),
+            "keeper_file": str(keeper_path),
+            "keeper_relative_path": str(keeper_path.relative_to(CHARACTER_ENGINE)),
+            "keeper_depth": keeper_depth,
         })
 
-        for item in files:
+        ordered_files = sorted(
+            files,
+            key=lambda item: (
+                -folder_depth(item["path"]),
+                str(item["path"].relative_to(CHARACTER_ENGINE)).lower(),
+            ),
+        )
+
+        for item in ordered_files:
+            path = item["path"]
             duplicate_files.append({
                 "group_id": group_id,
+                "action": "KEEP" if path == keeper_path else "QUARANTINE",
+                "folder_depth": folder_depth(path),
                 "pixel_hash": digest,
-                "file_path": str(item["path"]),
-                "relative_path": str(item["path"].relative_to(CHARACTER_ENGINE)),
+                "file_path": str(path),
+                "relative_path": str(path.relative_to(CHARACTER_ENGINE)),
                 "width": item["width"],
                 "height": item["height"],
             })
@@ -126,7 +170,9 @@ def main():
                 "copies",
                 "width",
                 "height",
-                "sample_file",
+                "keeper_file",
+                "keeper_relative_path",
+                "keeper_depth",
             ],
         )
         writer.writeheader()
@@ -137,6 +183,8 @@ def main():
             f,
             fieldnames=[
                 "group_id",
+                "action",
+                "folder_depth",
                 "pixel_hash",
                 "file_path",
                 "relative_path",
