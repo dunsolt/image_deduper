@@ -10,7 +10,7 @@ IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
 }
 
-CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/My Stuff/Character Engine")
+CHARACTER_ENGINE = Path("/mnt/c/Users/Danvx/Character Engine")
 INBOX = CHARACTER_ENGINE / "ZZ_Inbox"
 SOURCE = INBOX / "new_only"
 DESTINATION = INBOX / "ready_to_sort"
